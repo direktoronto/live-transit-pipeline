@@ -1,0 +1,79 @@
+pipeline:
+  name: live-transit-pipeline
+  identifier: live_transit_pipeline
+  projectIdentifier: mobility
+  orgIdentifier: transit
+  tags: {}
+  stages:
+    - stage:
+        name: Build
+        identifier: Build
+        type: CI
+        spec:
+          execution:
+            steps:
+              - step:
+                  type: Run
+                  name: Gradle Build
+                  identifier: GradleBuild
+                  spec:
+                    shell: Bash
+                    command: |
+                      cd services/ingestion && ./gradlew clean build
+                      cd ../api && ./gradlew clean build
+              - step:
+                  type: Run
+                  name: Python Tests
+                  identifier: PythonTests
+                  spec:
+                    shell: Bash
+                    command: |
+                      cd services/etl-worker
+                      python -m venv .venv
+                      source .venv/bin/activate
+                      pip install -r requirements.txt
+                      pytest
+    - stage:
+        name: Package
+        identifier: Package
+        type: CD
+        spec:
+          deploymentType: ECS
+          execution:
+            steps:
+              - step:
+                  type: Run
+                  name: Docker Build
+                  identifier: DockerBuild
+                  spec:
+                    shell: Bash
+                    command: |
+                      docker build -t $INGESTION_IMAGE_TAG services/ingestion
+                      docker build -t $API_IMAGE_TAG services/api
+    - stage:
+        name: Deploy
+        identifier: Deploy
+        type: CD
+        spec:
+          deploymentType: ECS
+          execution:
+            steps:
+              - step:
+                  type: Run
+                  name: Terraform Apply
+                  identifier: TerraformApply
+                  spec:
+                    shell: Bash
+                    command: |
+                      cd infra
+                      terraform init
+                      terraform apply -auto-approve
+              - step:
+                  type: Run
+                  name: ECS Update
+                  identifier: ECSUpdate
+                  spec:
+                    shell: Bash
+                    command: |
+                      aws ecs update-service --cluster $ECS_CLUSTER --service ingestion --force-new-deployment
+                      aws ecs update-service --cluster $ECS_CLUSTER --service api --force-new-deployment

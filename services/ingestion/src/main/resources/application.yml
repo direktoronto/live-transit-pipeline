@@ -1,0 +1,10 @@
+spring:
+  application:
+    name: ingestion-service
+
+logging:
+  level:
+    root: INFO
+
+publisher:
+  interval-ms: 5000
